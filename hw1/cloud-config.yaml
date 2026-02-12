@@ -1,0 +1,20 @@
+#cloud-config
+datasource:
+ Ec2:
+  strict_id: false
+ssh_pwauth: no
+users:
+- name: vladluk
+  sudo: ALL=(ALL) NOPASSWD:ALL
+  shell: /bin/bash
+  ssh_authorized_keys:
+  - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINufx/2mS4T3PsIXwlZT6OT5IOFDxu0yc8QCfSk8jJgY vladl2802@yandex.ru
+
+write_files:
+- path: /home/vladluk/run.sh
+  permissions: '0755'
+  encoding: b64
+  content: ${script_content}
+
+runcmd:
+  [sudo /home/vladluk/run.sh]

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+export HOME=/root
+export SHELL=/bin/bash
+
+mkdir -p /root/.config/code-server/
+
+# cURL подтягивает образ IDE
+curl -fsSL https://code-server.dev/install.sh | sh
+
+cat > /root/.config/code-server/config.yaml << EOF
+bind-addr: 0.0.0.0:8080
+auth: password
+password: trustme
+cert: false
+EOF
+
+# настраиваем автозапуск VSCode для пользователя root
+mkdir -p /etc/systemd/system/code-server\@root.service.d
+cat > /etc/systemd/system/code-server\@root.service.d/override.conf << EOF
+[Service]
+Environment="SHELL=/bin/bash"
+EOF
+
+systemctl daemon-reload
+
+systemctl enable code-server@root
+systemctl start code-server@root
