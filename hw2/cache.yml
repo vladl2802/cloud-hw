@@ -1,0 +1,31 @@
+- hosts: nat
+  gather_facts: false
+  become: true
+  vars:
+    ch_image: "clickhouse/clickhouse-server:24.3"
+    ch_tar_remote: "/tmp/clickhouse-server_24.3.tar"
+    ch_tar_local: "{{ playbook_dir }}/.cache/clickhouse-server_24.3.tar"
+  tasks:
+    - name: Ensure local cache dir exists (on control machine)
+      delegate_to: localhost
+      run_once: true
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/.cache"
+        state: directory
+        mode: "0755"
+
+    - name: Pull ClickHouse image on NAT (has internet)
+      ansible.builtin.command: docker pull {{ ch_image }}
+      environment:
+        DOCKER_API_VERSION: "1.43"
+
+    - name: Save ClickHouse image to tar on NAT
+      ansible.builtin.command: docker save -o {{ ch_tar_remote }} {{ ch_image }}
+      environment:
+        DOCKER_API_VERSION: "1.43"
+
+    - name: Fetch tar from NAT to control machine
+      ansible.builtin.fetch:
+        src: "{{ ch_tar_remote }}"
+        dest: "{{ ch_tar_local }}"
+        flat: true

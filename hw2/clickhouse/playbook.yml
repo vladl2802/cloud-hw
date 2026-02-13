@@ -1,0 +1,100 @@
+- hosts: clickhouse
+  become: true
+  vars:
+    clickhouse_image_name: "clickhouse:24.3"
+    clickhouse_container_name: "clickhouse-server"
+    clickhouse_data_dir: "/opt/clickhouse_data"
+    clickhouse_build_dir: "/opt/clickhouse_image"
+
+    clickhouse_ports:
+      - "8123:8123"
+      - "9000:9000"
+    clickhouse_ulimit_nofile: "262144:262144"
+
+  tasks:
+    - name: Create ClickHouse dirs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ clickhouse_data_dir }}"
+        - "{{ clickhouse_build_dir }}"
+
+    - name: Copy Docker build context (Dockerfile + init scripts)
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/image/"
+        dest: "{{ clickhouse_build_dir }}/"
+        mode: "0644"
+
+    - name: Load Clickhouse image
+      ansible.builtin.command: docker load -i {{ clickhouse_build_dir }}/clickhouse-image.tar
+      environment:
+        DOCKER_API_VERSION: "1.43"
+
+    - name: Build ClickHouse image
+      ansible.builtin.command: docker build -t {{ clickhouse_image_name }} .
+      args:
+        chdir: "{{ clickhouse_build_dir }}"
+      environment:
+        DOCKER_API_VERSION: "1.43"
+
+    - name: Remove old container if exists
+      ansible.builtin.command: docker rm -f {{ clickhouse_container_name }}
+      register: rm_out
+      failed_when: false
+      changed_when: rm_out.rc == 0
+
+    - name: Run ClickHouse container (stock image)
+      ansible.builtin.shell: |
+        set -e
+        docker rm -f {{ clickhouse_container_name }} >/dev/null 2>&1 || true
+        docker run -d \
+          --name {{ clickhouse_container_name }} \
+          --restart=always \
+          --ulimit nofile={{ clickhouse_ulimit_nofile }} \
+          {% for p in clickhouse_ports %}-p {{ p }} {% endfor %} \
+          -v {{ clickhouse_data_dir }}:/var/lib/clickhouse \
+          -v {{ playbook_dir }}/noauth.xml:/etc/clickhouse-server/users.d/noauth.xml:ro \
+          clickhouse/clickhouse-server:24.3
+      args:
+        executable: /bin/bash
+      environment:
+        DOCKER_API_VERSION: "1.43"
+
+    - name: Wait for ClickHouse /ping (no python uri needed)
+      ansible.builtin.shell: |
+        set -e
+        for i in $(seq 1 30); do
+          curl -sf http://127.0.0.1:8123/ping && exit 0
+          sleep 2
+        done
+        exit 1
+      args:
+        executable: /bin/bash
+
+    - name: Init table
+      ansible.builtin.command: >
+        docker exec -i {{ clickhouse_container_name }}
+        clickhouse-client --multiquery
+      args:
+        stdin: "{{ lookup('file', playbook_dir + '/image/table.sql') }}"
+      environment:
+        DOCKER_API_VERSION: "1.43"
+
+
+    - name: Wait for ClickHouse HTTP port
+      ansible.builtin.wait_for:
+        host: "127.0.0.1"
+        port: 8123
+        timeout: 60
+
+    - name: Check ClickHouse is responding
+      uri:
+        url: http://localhost:8123/ping
+        method: GET
+        status_code: 200
+      register: clickhouse_health
+      retries: 10
+      delay: 5
+      until: clickhouse_health.status == 200

@@ -1,0 +1,33 @@
+{
+  "external_ip_nat": {
+    "sensitive": false,
+    "type": "string",
+    "value": "158.160.26.5"
+  },
+  "external_ip_reverse_proxy": {
+    "sensitive": false,
+    "type": "string",
+    "value": "84.201.160.156"
+  },
+  "internal_ip_clickhouse": {
+    "sensitive": false,
+    "type": "string",
+    "value": "192.168.10.10"
+  },
+  "internal_ip_logbroker": {
+    "sensitive": false,
+    "type": [
+      "tuple",
+      [
+        "string",
+        "string",
+        "string"
+      ]
+    ],
+    "value": [
+      "192.168.42.8",
+      "192.168.42.21",
+      "192.168.42.7"
+    ]
+  }
+}

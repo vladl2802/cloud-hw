@@ -1,0 +1,12 @@
+<clickhouse>
+  <users>
+    <default>
+      <password></password>
+      <networks>
+        <ip>192.168.10.0/24</ip>
+        <ip>192.168.42.0/24</ip>
+      </networks>
+      <access_management>0</access_management>
+    </default>
+  </users>
+</clickhouse>

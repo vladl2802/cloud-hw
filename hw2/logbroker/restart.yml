@@ -1,0 +1,16 @@
+- hosts: logbroker
+  tasks:
+    - name: Install Logbroker systemd unit
+      become: true
+      template:
+        src: sysctl.j2
+        dest: /etc/systemd/system/logbroker.service
+        mode: "0644"
+
+    - name: Reload systemd
+      become: true
+      command: systemctl daemon-reload
+
+    - name: Restart Logbroker service
+      become: true
+      command: sudo systemctl restart logbroker

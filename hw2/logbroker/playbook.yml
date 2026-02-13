@@ -1,0 +1,57 @@
+---
+- hosts: logbroker
+  vars:
+    logbroker_buffer_dir: "/var/lib/logbroker"
+
+    clickhouse_host: "{{ groups['clickhouse'][0] }}"
+    clickhouse_url: "http://{{ clickhouse_host }}:8123"
+    clickhouse_table: "default.logs_raw"
+  tasks:
+    - name: Update apt cache and install deps
+      apt:
+        name: "{{ item }}"
+        state: latest
+        update_cache: yes
+      with_items:
+        - python3-pip
+        - python3-dev
+      become: yes
+      become_method: sudo
+    - name: Install venv
+      pip:
+        name: virtualenv
+      become: yes
+      become_method: sudo
+    - name: Copy files
+      copy:
+        src: "{{ item }}"
+        dest: /home/{{ ansible_user }}/logbroker/
+      with_items:
+        - main.py
+        - requirements.txt
+    - name: Creates venv directory
+      file:
+        path: /home/{{ ansible_user }}/logbroker/venv/
+        state: directory
+    - name: Install modules in a virtualenv
+      pip:
+        requirements: /home/{{ ansible_user }}/logbroker/requirements.txt
+        virtualenv: /home/{{ ansible_user }}/logbroker/venv/
+    - name: Create logbroker buffer dir
+      become: true
+      ansible.builtin.file:
+        path: "{{ logbroker_buffer_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+    - name: Template systemd service config
+      template:
+        src: sysctl.j2
+        dest: /etc/systemd/system/logbroker.service
+      become: yes
+      become_method: sudo
+    - name: Start systemd app service
+      systemd: name=logbroker.service state=restarted enabled=yes daemon_reload=true
+      become: yes
+      become_method: sudo
