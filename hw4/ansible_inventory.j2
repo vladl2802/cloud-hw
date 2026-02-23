@@ -1,0 +1,24 @@
+[nat]
+{{ external_ip_nat.value }}
+
+[nat:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+ansible_python_interpreter=/usr/bin/python3
+
+[application]
+{{ application_private_ip.value }}
+
+[application:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p -q vladluk@{{ external_ip_nat.value }}"'
+ansible_python_interpreter=/usr/bin/python3
+registry_id={{ registry_id.value }}
+repo=application
+tag=v2
+
+[monitoring]
+{{ monitoring_private_ip.value }}
+
+[monitoring:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p -q vladluk@{{ external_ip_nat.value }}"'
+ansible_python_interpreter=/usr/bin/python3
+

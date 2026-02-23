@@ -1,0 +1,41 @@
+pandora:
+  enabled: true
+  package: yandextank.plugins.Pandora
+  config_content:
+    pools:
+      - id: HTTP
+        gun:
+          type: http
+          target: 192.168.42.17:8000
+          ssl: false
+        ammo:
+          type: raw
+          file: post.ammo.txt
+        result:
+          type: phout
+          destination: ./phout.log
+        startup:
+          type: once
+          times: 1000
+        rps:
+          - type: line
+            from: 1
+            to: 5
+            duration: 6m
+        discard_overflow: true
+    log:
+      level: error
+    monitoring:
+      expvar:
+        enabled: true
+        port: 1234
+autostop:
+  enabled: true
+  package: yandextank.plugins.Autostop
+  autostop:
+    - quantile(98,5000,5s,)
+    - negative_http(2xx,100%,5s,)
+    - negative_net(0,100%,5s,)
+    - instances(90%,5s)
+    - limit(10m)
+core: {}

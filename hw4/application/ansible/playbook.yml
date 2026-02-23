@@ -1,0 +1,97 @@
+---
+- hosts: application
+  become: true
+  vars:
+    container_name: "application"
+    node_exporter_name: "node-exporter"
+
+    host_port: 8000
+    container_port: 8000
+    node_exporter_port: 9100
+
+    ycr_image: "cr.yandex/{{ registry_id }}/{{ repo }}:{{ tag }}"
+    node_exporter_image: "quay.io/prometheus/node-exporter:v1.10.2"
+
+  tasks:
+    - name: Check docker exists
+      ansible.builtin.command: docker version
+      register: docker_check
+      changed_when: false
+
+    - name: Check yc is installed
+      ansible.builtin.command: yc --version
+      register: yc_check
+      changed_when: false
+      ignore_errors: true
+
+    - name: Install prerequisites for installer (curl)
+      ansible.builtin.package:
+        name: curl
+        state: present
+      when: yc_check is failed
+
+    - name: Install yc CLI using official install.sh
+      ansible.builtin.shell: |
+        set -euo pipefail
+        curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash -s -- -i /usr/local -n
+        export PATH="/usr/local/yandex-cloud/bin:$PATH"
+      args:
+        executable: /bin/bash
+      when: yc_check is failed
+
+    - name: Ensure docker service is running (if systemd unit exists)
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+      ignore_errors: true
+
+    - name: Check yc exists
+      ansible.builtin.command: yc --version
+      changed_when: false
+
+    - name: Get IAM token from instance metadata (service account)
+      ansible.builtin.uri:
+        url: "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
+        method: GET
+        headers:
+          Metadata-Flavor: "Google"
+        return_content: true
+      register: iam_token
+      no_log: true
+
+    - name: Configure yc to use IAM token (non-interactive)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        yc config set token "{{ iam_token.json.access_token }}"
+      no_log: true
+      args:
+        executable: /bin/bash
+      changed_when: false
+
+    - name: Pull node-exporter image
+      ansible.builtin.command: "docker pull {{ node_exporter_image }}"
+
+    - name: Run node-exporter container (recreate)
+      ansible.builtin.shell: |
+        set -e
+        docker rm -f {{ node_exporter_name }} >/dev/null 2>&1 || true
+        docker run -d --restart unless-stopped \
+          --name {{ node_exporter_name }} \
+          --net=host \
+          --pid=host \
+          -v "/:/host:ro,rslave" \
+          {{ node_exporter_image }} \
+          --path.rootfs=/host
+
+    - name: Pull image
+      ansible.builtin.command: "docker pull {{ ycr_image }}"
+
+    - name: Run container (recreate)
+      ansible.builtin.shell: |
+        set -e
+        docker rm -f {{ container_name }} >/dev/null 2>&1 || true
+        docker run -d --restart unless-stopped \
+          --name {{ container_name }} \
+          -p {{ host_port }}:{{ container_port }} \
+          {{ ycr_image }}

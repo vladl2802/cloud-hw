@@ -1,0 +1,22 @@
+{
+  "application_private_ip": {
+    "sensitive": false,
+    "type": "string",
+    "value": "192.168.42.17"
+  },
+  "external_ip_nat": {
+    "sensitive": false,
+    "type": "string",
+    "value": "178.154.192.148"
+  },
+  "monitoring_private_ip": {
+    "sensitive": false,
+    "type": "string",
+    "value": "192.168.42.4"
+  },
+  "registry_id": {
+    "sensitive": false,
+    "type": "string",
+    "value": "crpto3dehv2hkl1si7di"
+  }
+}

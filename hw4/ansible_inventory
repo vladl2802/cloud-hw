@@ -1,0 +1,24 @@
+[nat]
+178.154.192.148
+
+[nat:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
+ansible_python_interpreter=/usr/bin/python3
+
+[application]
+192.168.42.17
+
+[application:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p -q vladluk@178.154.192.148"'
+ansible_python_interpreter=/usr/bin/python3
+registry_id=crpto3dehv2hkl1si7di
+repo=application
+tag=v2
+
+[monitoring]
+192.168.42.4
+
+[monitoring:vars]
+ansible_ssh_common_args='-o StrictHostKeyChecking=no -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p -q vladluk@178.154.192.148"'
+ansible_python_interpreter=/usr/bin/python3
+

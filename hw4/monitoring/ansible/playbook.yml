@@ -1,0 +1,110 @@
+---
+- hosts: monitoring
+  become: true
+  vars:
+    prometheus_container_name: "prometheus"
+    grafana_container_name: "grafana"
+
+    prometheus_image: "prom/prometheus:v2.52.0"
+    grafana_image: "grafana/grafana:10.4.3"
+
+    prometheus_port: 9090
+    grafana_port: 3000
+
+    prometheus_scrape_interval: "15s"
+
+    grafana_admin_user: "admin"
+    grafana_admin_password: "admin"
+
+    monitoring_root: "/opt/monitoring"
+    prometheus_config_dir: "{{ monitoring_root }}/prometheus"
+    prometheus_data_dir: "{{ monitoring_root }}/prometheus-data"
+    grafana_data_dir: "{{ monitoring_root }}/grafana-data"
+    grafana_provisioning_dir: "{{ monitoring_root }}/grafana-provisioning"
+    grafana_provisioning_ds_dir: "{{ grafana_provisioning_dir }}/datasources"
+
+  tasks:
+    - name: Check docker exists
+      ansible.builtin.command: docker version
+      register: docker_check
+      changed_when: false
+
+    - name: Ensure docker service is running (if systemd unit exists)
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+      ignore_errors: true
+
+    - name: Create directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        mode: "0755"
+        owner: "{{ item.owner | default(omit) }}"
+        group: "{{ item.group | default(omit) }}"
+      loop:
+        - { path: "{{ prometheus_config_dir }}" }
+        - { path: "{{ prometheus_data_dir }}", owner: "65534", group: "65534" }
+        - { path: "{{ grafana_data_dir }}", owner: "472", group: "472" }
+        - { path: "{{ grafana_provisioning_dir }}", owner: "472", group: "472" }
+        - { path: "{{ grafana_provisioning_ds_dir }}", owner: "472", group: "472" }
+
+    - name: Render prometheus.yml
+      ansible.builtin.template:
+        src: prometheus.yml.j2
+        dest: "{{ prometheus_config_dir }}/prometheus.yml"
+        mode: "0644"
+      notify: Reload prometheus
+
+    - name: Provision Grafana Prometheus datasource
+      ansible.builtin.template:
+        src: grafana-datasource.yml.j2
+        dest: "{{ grafana_provisioning_ds_dir }}/prometheus.yml"
+        mode: "0644"
+
+    - name: Create monitoring network
+      ansible.builtin.shell: |
+        docker network create monitoring || true
+
+    - name: Pull Prometheus image
+      ansible.builtin.command: "docker pull {{ prometheus_image }}"
+
+    - name: Run Prometheus container (recreate)
+      ansible.builtin.shell: |
+        set -e
+        docker rm -f {{ prometheus_container_name }} >/dev/null 2>&1 || true
+        docker run -d --restart unless-stopped \
+          --name {{ prometheus_container_name }} \
+          --network monitoring \
+          -p {{ prometheus_port }}:9090 \
+          -v "{{ prometheus_config_dir }}:/etc/prometheus:ro" \
+          -v "{{ prometheus_data_dir }}:/prometheus" \
+          {{ prometheus_image }} \
+          --config.file=/etc/prometheus/prometheus.yml \
+          --storage.tsdb.path=/prometheus
+      args:
+        executable: /bin/bash
+
+    - name: Pull Grafana image
+      ansible.builtin.command: "docker pull {{ grafana_image }}"
+
+    - name: Run Grafana container (recreate)
+      ansible.builtin.shell: |
+        set -e
+        docker rm -f {{ grafana_container_name }} >/dev/null 2>&1 || true
+        docker run -d --restart unless-stopped \
+          --name {{ grafana_container_name }} \
+          --network monitoring \
+          -p {{ grafana_port }}:3000 \
+          -e GF_SECURITY_ADMIN_USER="{{ grafana_admin_user }}" \
+          -e GF_SECURITY_ADMIN_PASSWORD="{{ grafana_admin_password }}" \
+          -v "{{ grafana_data_dir }}:/var/lib/grafana" \
+          -v "{{ grafana_provisioning_dir }}:/etc/grafana/provisioning:ro" \
+          {{ grafana_image }}
+      args:
+        executable: /bin/bash
+
+  handlers:
+  - name: Reload prometheus
+    ansible.builtin.command: "docker kill -s HUP {{ prometheus_container_name }}"
